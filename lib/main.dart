@@ -16,6 +16,7 @@ import 'widgets/app_lock_overlay_layer.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  await PremiumService.instance.configurePurchasesSdk();
   await VaultKeys.instance.ensureInitialized();
   await ScanStorage.migrateLegacyPlaintextArtifacts();
   await PremiumService.instance.ensureLoaded();

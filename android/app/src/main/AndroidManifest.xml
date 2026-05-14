@@ -9,6 +9,7 @@
         android:required="false" />
 
     <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="com.android.vending.BILLING" />
 
     <!-- Strip transitive permissions we do not use (camera image capture only). -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" tools:node="remove" />

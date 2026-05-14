@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:purchases_flutter/purchases_flutter.dart';
 
 import '../services/premium_service.dart';
 import '../theme/app_theme.dart';
 
-/// Full-screen premium upsell with mock checkout (swap for StoreKit / Play Billing).
+/// Full-screen premium upsell (RevenueCat + store products when configured).
 class PaywallScreen extends StatefulWidget {
   const PaywallScreen({super.key});
 
@@ -16,6 +17,9 @@ class _PaywallScreenState extends State<PaywallScreen> with TickerProviderStateM
   static const double _monthly = 6.99;
   static const double _yearly = 39.99;
 
+  Package? _monthlyPkg;
+  Package? _annualPkg;
+
   late final AnimationController _pulse = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 2400),
@@ -26,10 +30,66 @@ class _PaywallScreenState extends State<PaywallScreen> with TickerProviderStateM
   _PlanChoice _selected = _PlanChoice.yearly;
   bool _busy = false;
 
+  @override
+  void initState() {
+    super.initState();
+    _loadOfferings();
+  }
+
+  Future<void> _loadOfferings() async {
+    try {
+      if (await Purchases.isConfigured) {
+        final offerings = await Purchases.getOfferings();
+        final current = offerings.current;
+        Package? m;
+        Package? a;
+        if (current != null) {
+          for (final p in current.availablePackages) {
+            if (p.packageType == PackageType.monthly) m ??= p;
+            if (p.packageType == PackageType.annual) a ??= p;
+          }
+          for (final p in current.availablePackages) {
+            final blob = '${p.identifier} ${p.storeProduct.identifier}'.toLowerCase();
+            if (m == null && (blob.contains('month') || blob.contains('1m'))) {
+              m = p;
+            }
+            if (a == null && (blob.contains('year') || blob.contains('annual') || blob.contains('1y'))) {
+              a = p;
+            }
+          }
+        }
+        if (mounted) {
+          setState(() {
+            _monthlyPkg = m;
+            _annualPkg = a;
+          });
+        }
+      }
+    } catch (_) {
+      // Keep fallback display prices.
+    }
+    if (mounted) setState(() {});
+  }
+
+  String get _monthlyPriceLabel =>
+      _monthlyPkg?.storeProduct.priceString ?? '\$${_monthly.toStringAsFixed(2)}';
+
+  String get _yearlyPriceLabel =>
+      _annualPkg?.storeProduct.priceString ?? '\$${_yearly.toStringAsFixed(2)}';
+
   int get _savePercent {
-    final annualIfMonthly = _monthly * 12;
-    final off = ((annualIfMonthly - _yearly) / annualIfMonthly * 100).round();
+    final mp = _monthlyPkg?.storeProduct.price ?? _monthly;
+    final yp = _annualPkg?.storeProduct.price ?? _yearly;
+    final annualIfMonthly = mp * 12;
+    if (annualIfMonthly <= 0) return 40;
+    final off = ((annualIfMonthly - yp) / annualIfMonthly * 100).round();
     return off.clamp(0, 99);
+  }
+
+  String? get _yearlyIntroLabel {
+    final intro = _annualPkg?.storeProduct.introductoryPrice;
+    if (intro == null) return null;
+    return 'Intro offer from the store when you qualify (${intro.priceString}).';
   }
 
   @override
@@ -67,7 +127,9 @@ class _PaywallScreenState extends State<PaywallScreen> with TickerProviderStateM
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('No purchases found to restore (mock billing).'),
+            content: const Text(
+              'No active subscription found. Use the same App Store or Google Play account you purchased with, then try again.',
+            ),
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadii.sm)),
           ),
@@ -221,7 +283,7 @@ class _PaywallScreenState extends State<PaywallScreen> with TickerProviderStateM
                       Expanded(
                         child: _PlanCard(
                           title: 'Monthly',
-                          priceLabel: '\$${_monthly.toStringAsFixed(2)}',
+                          priceLabel: _monthlyPriceLabel,
                           period: '/ month',
                           selected: _selected == _PlanChoice.monthly,
                           onTap: () {
@@ -234,7 +296,7 @@ class _PaywallScreenState extends State<PaywallScreen> with TickerProviderStateM
                       Expanded(
                         child: _PlanCard(
                           title: 'Yearly',
-                          priceLabel: '\$${_yearly.toStringAsFixed(2)}',
+                          priceLabel: _yearlyPriceLabel,
                           period: '/ year',
                           badge: 'Save $_savePercent%',
                           selected: _selected == _PlanChoice.yearly,
@@ -258,7 +320,8 @@ class _PaywallScreenState extends State<PaywallScreen> with TickerProviderStateM
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          '${PremiumService.trialDays}-day free trial on yearly — cancel anytime.',
+                          _yearlyIntroLabel ??
+                              'Free trials and intro offers, when available, are applied by the App Store or Google Play at checkout. Yearly plans often include trials (commonly ${PremiumService.trialDays} days) when configured by the publisher.',
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.fog),
                         ),
                       ),
@@ -298,7 +361,7 @@ class _PaywallScreenState extends State<PaywallScreen> with TickerProviderStateM
                             ? null
                             : () {
                                 if (_selected == _PlanChoice.yearly) {
-                                  _run(PremiumService.instance.startFreeTrial);
+                                  _run(PremiumService.instance.purchaseYearly);
                                 } else {
                                   _run(PremiumService.instance.purchaseMonthly);
                                 }
@@ -315,8 +378,8 @@ class _PaywallScreenState extends State<PaywallScreen> with TickerProviderStateM
                               )
                             : Text(
                                 _selected == _PlanChoice.yearly
-                                    ? 'Start ${PremiumService.trialDays}-day free trial'
-                                    : 'Subscribe for \$${_monthly.toStringAsFixed(2)}/mo',
+                                    ? 'Subscribe yearly'
+                                    : 'Subscribe monthly',
                                 style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
                               ),
                       ),
@@ -326,23 +389,31 @@ class _PaywallScreenState extends State<PaywallScreen> with TickerProviderStateM
                       onPressed: _busy
                           ? null
                           : () {
-                              if (_selected == _PlanChoice.yearly) {
-                                _run(PremiumService.instance.purchaseYearly);
-                              } else {
-                                setState(() => _selected = _PlanChoice.yearly);
-                                _run(PremiumService.instance.startFreeTrial);
-                              }
+                              HapticFeedback.selectionClick();
+                              setState(() {
+                                _selected = _selected == _PlanChoice.yearly
+                                    ? _PlanChoice.monthly
+                                    : _PlanChoice.yearly;
+                              });
                             },
                       child: Text(
                         _selected == _PlanChoice.yearly
-                            ? 'Skip trial — subscribe yearly now'
-                            : 'Try yearly with ${PremiumService.trialDays}-day trial',
+                            ? 'Prefer monthly?'
+                            : 'Switch to yearly — save $_savePercent%',
                         style: const TextStyle(fontWeight: FontWeight.w700),
                       ),
                     ),
+                    if (!PremiumService.instance.isRevenueCatConfigured) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'This build is missing RevenueCat API keys — purchases are disabled. See docs/REVENUECAT_SETUP.md.',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.ember),
+                      ),
+                    ],
                     const SizedBox(height: 4),
                     Text(
-                      'Mock billing — no charges. Replace with in-app purchases when ready.',
+                      'Subscriptions renew until canceled in your App Store or Google Play account settings.',
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.mist),
                     ),
