@@ -4,8 +4,9 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:provider/provider.dart';
 
-import '../services/premium_service.dart';
+import '../services/subscription_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/paywall_navigation.dart';
 import '../widgets/app_page_routes.dart';
@@ -111,16 +112,18 @@ class _ScannerScreenState extends State<ScannerScreen> with TickerProviderStateM
     final controller = _controller;
     if (controller == null || !controller.value.isInitialized || _capturing) return;
 
-    if (!PremiumService.instance.hasUnlimitedPages &&
-        _pages.length >= PremiumService.freePageLimit) {
+    final sub = context.read<SubscriptionService>();
+    if (!sub.hasUnlimitedPages && _pages.length >= SubscriptionService.freePageLimit) {
       HapticFeedback.lightImpact();
       await openPaywall(context);
       if (!mounted) return;
-      if (!PremiumService.instance.hasUnlimitedPages) {
+      await sub.loadSubscriptionStatus();
+      if (!mounted) return;
+      if (!sub.hasUnlimitedPages) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Free scans are limited to ${PremiumService.freePageLimit} pages. Upgrade for unlimited.',
+              'Free scans are limited to ${SubscriptionService.freePageLimit} pages. Upgrade for unlimited.',
             ),
             behavior: SnackBarBehavior.floating,
           ),

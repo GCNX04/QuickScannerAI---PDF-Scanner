@@ -8,7 +8,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../services/secure_file_wipe.dart';
 
-import '../../services/premium_service.dart';
+import '../../services/subscription_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/paywall_navigation.dart';
 import '../../widgets/qs_snackbar.dart';
@@ -107,8 +107,8 @@ class _OcrTextPanelState extends State<OcrTextPanel> {
   String _activeBody() {
     final full = _fullActiveText();
     if (widget.isPremium) return full;
-    if (full.length <= PremiumService.ocrPreviewCharacterLimit) return full;
-    return full.substring(0, PremiumService.ocrPreviewCharacterLimit);
+    if (full.length <= SubscriptionService.ocrPreviewCharacterLimit) return full;
+    return full.substring(0, SubscriptionService.ocrPreviewCharacterLimit);
   }
 
   String _exportableForActions() => _activeBody();
@@ -139,7 +139,8 @@ class _OcrTextPanelState extends State<OcrTextPanel> {
   }
 
   Future<void> _share() async {
-    await Share.share(_exportableForActions(), subject: 'QuickScanner OCR');
+    final text = _exportableForActions();
+    await Share.share(text, subject: 'QuickScanner OCR');
   }
 
   Future<void> _exportFile() async {
@@ -240,7 +241,7 @@ class _OcrTextPanelState extends State<OcrTextPanel> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Preview (${PremiumService.ocrPreviewCharacterLimit} chars). Upgrade for full text, edit, and file export.',
+                      'Preview (${SubscriptionService.ocrPreviewCharacterLimit} chars). Upgrade for full text, edit, and file export.',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ),

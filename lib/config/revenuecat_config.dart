@@ -1,7 +1,7 @@
 /// Build-time RevenueCat configuration (`--dart-define`, see docs/REVENUECAT_SETUP.md).
 ///
 /// This app ships **Android only** for billing: only [androidApiKey] is used at runtime.
-/// [iosApiKey] is reserved for a future iOS build and is ignored by [PremiumService].
+/// Must match the entitlement identifier in RevenueCat (default **`pro`**).
 abstract final class RevenueCatConfig {
   /// Must match the entitlement identifier in the RevenueCat dashboard.
   static const String entitlementId = String.fromEnvironment(

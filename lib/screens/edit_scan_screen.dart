@@ -3,17 +3,20 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 
 import '../models/document_insights.dart';
 import '../services/image_page_processor.dart';
 import '../services/isolate_filter_thumb.dart';
 import '../services/ocr/document_text_analysis.dart';
 import '../services/ocr/mlkit_ocr_service.dart';
-import '../services/premium_service.dart';
+import '../services/subscription_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/require_pro.dart';
 import '../widgets/app_page_routes.dart';
 import '../widgets/editor/ocr_text_panel.dart';
 import '../widgets/editor/smart_data_panel.dart';
+import '../widgets/editor/smart_insights_locked_panel.dart';
 import '../widgets/premium_badge.dart';
 import '../widgets/qs_pressable.dart';
 import '../widgets/qs_snackbar.dart';
@@ -107,7 +110,8 @@ class _EditScanScreenState extends State<EditScanScreen> with TickerProviderStat
 
   void _onTabs() {
     if (_tabs.indexIsChanging) return;
-    if (_tabs.index == 2) {
+    if (!mounted) return;
+    if (_tabs.index == 2 && context.read<SubscriptionService>().isPro) {
       _scheduleInsightsRefresh();
     }
   }
@@ -133,6 +137,8 @@ class _EditScanScreenState extends State<EditScanScreen> with TickerProviderStat
   }
 
   void _scheduleInsightsRefresh() {
+    if (!mounted) return;
+    if (!context.read<SubscriptionService>().isPro) return;
     _insightsDebounce?.cancel();
     _insightsDebounce = Timer(const Duration(milliseconds: 420), () {
       _recomputeInsights();
@@ -140,6 +146,16 @@ class _EditScanScreenState extends State<EditScanScreen> with TickerProviderStat
   }
 
   Future<void> _recomputeInsights() async {
+    if (!mounted) return;
+    if (!context.read<SubscriptionService>().isPro) {
+      if (mounted) {
+        setState(() {
+          _insights = null;
+          _insightsLoading = false;
+        });
+      }
+      return;
+    }
     final corpus = _combinedOcr();
     if (corpus.trim().length < 4) {
       if (mounted) {
@@ -214,13 +230,17 @@ class _EditScanScreenState extends State<EditScanScreen> with TickerProviderStat
   Future<void> _openRename() async {
     HapticFeedback.lightImpact();
     var suggestions = <String>[];
-    try {
-      final corpus = _combinedOcr();
-      if (corpus.trim().length >= 12) {
-        final map = await compute(analyzeDocumentTextIsolate, corpus);
-        suggestions = DocumentInsights.fromMap(map).nameIdeas;
-      }
-    } catch (_) {}
+    if (!mounted) return;
+    final sub = context.read<SubscriptionService>();
+    if (sub.isPro) {
+      try {
+        final corpus = _combinedOcr();
+        if (corpus.trim().length >= 12) {
+          final map = await compute(analyzeDocumentTextIsolate, corpus);
+          suggestions = DocumentInsights.fromMap(map).nameIdeas;
+        }
+      } catch (_) {}
+    }
     if (suggestions.isEmpty) {
       suggestions = [_defaultTitle(), 'Scan_notes', 'My document'];
     }
@@ -238,7 +258,7 @@ class _EditScanScreenState extends State<EditScanScreen> with TickerProviderStat
       builder: (context) => RenameDocumentSheet(
         initialName: _title,
         suggestedNames: suggestions,
-        previewSuggestionsOnly: !PremiumService.instance.hasFullDocumentIntelligence,
+        previewSuggestionsOnly: !sub.isPro,
       ),
     );
     if (next != null && next.trim().isNotEmpty) {
@@ -396,6 +416,7 @@ class _EditScanScreenState extends State<EditScanScreen> with TickerProviderStat
   }
 
   Future<void> _export() async {
+    if (!await requirePro(context)) return;
     final rendered = <Uint8List>[];
     for (var i = 0; i < _pages.length; i++) {
       rendered.add(
@@ -424,9 +445,8 @@ class _EditScanScreenState extends State<EditScanScreen> with TickerProviderStat
 
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: PremiumService.instance,
-      builder: (context, _) {
+    return Consumer<SubscriptionService>(
+      builder: (context, sub, _) {
         return Scaffold(
       backgroundColor: AppColors.voidBlack,
       extendBodyBehindAppBar: true,
@@ -449,7 +469,7 @@ class _EditScanScreenState extends State<EditScanScreen> with TickerProviderStat
           ),
         ),
         actions: [
-          if (PremiumService.instance.isEntitled)
+          if (sub.isPro)
             const Padding(
               padding: EdgeInsets.only(right: 4, top: 10, bottom: 10),
               child: PremiumBadge(compact: true),
@@ -582,16 +602,18 @@ class _EditScanScreenState extends State<EditScanScreen> with TickerProviderStat
                 onSegment: (s) => setState(() => _ocrSegment = s),
                 jobStates: _ocrJobStates,
                 pageTexts: _ocrByPage,
-                isPremium: PremiumService.instance.hasFullDocumentIntelligence,
+                isPremium: sub.isPro,
                 onPageTextChanged: (i, t) => setState(() => _ocrByPage[i] = t),
                 onRefresh: () => unawaited(_kickOcrPipeline(bypassCache: true)),
               ),
-              smartDataChild: SmartDataPanel(
-                insights: _insights,
-                loading: _insightsLoading,
-                isPremium: PremiumService.instance.hasFullDocumentIntelligence,
-                onRefresh: () => unawaited(_recomputeInsights()),
-              ),
+              smartDataChild: sub.isPro
+                  ? SmartDataPanel(
+                      insights: _insights,
+                      loading: _insightsLoading,
+                      isPremium: true,
+                      onRefresh: () => unawaited(_recomputeInsights()),
+                    )
+                  : const SmartInsightsLockedPanel(),
             ),
           ),
         ],

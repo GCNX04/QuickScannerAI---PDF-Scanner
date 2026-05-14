@@ -1,7 +1,9 @@
 import 'package:camera/camera.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
 import 'package:quickscanner/main.dart';
 import 'package:quickscanner/services/onboarding_prefs.dart';
+import 'package:quickscanner/services/subscription_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -9,8 +11,13 @@ void main() {
     TestWidgetsFlutterBinding.ensureInitialized();
     SharedPreferences.setMockInitialValues({OnboardingPrefs.prefsKey: true});
 
+    final subscription = SubscriptionService();
+
     await tester.pumpWidget(
-      const QuickScannerApp(cameras: <CameraDescription>[]),
+      ChangeNotifierProvider<SubscriptionService>.value(
+        value: subscription,
+        child: const QuickScannerApp(cameras: <CameraDescription>[]),
+      ),
     );
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));

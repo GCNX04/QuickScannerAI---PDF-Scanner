@@ -1,6 +1,7 @@
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 
 import 'core/security/app_lifecycle_lock.dart';
 import 'core/security/app_lock_service.dart';
@@ -8,18 +9,19 @@ import 'core/security/vault_keys.dart';
 import 'screens/home_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'services/onboarding_prefs.dart';
-import 'services/premium_service.dart';
 import 'services/scan_storage.dart';
+import 'services/subscription_service.dart';
 import 'theme/app_theme.dart';
 import 'widgets/app_lock_overlay_layer.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await PremiumService.instance.configurePurchasesSdk();
+  final subscription = SubscriptionService();
+  await subscription.initialize();
   await VaultKeys.instance.ensureInitialized();
   await ScanStorage.migrateLegacyPlaintextArtifacts();
-  await PremiumService.instance.ensureLoaded();
+  await subscription.loadSubscriptionStatus();
   await AppLockService.instance.loadPreferences();
 
   await SystemChrome.setPreferredOrientations([
@@ -35,10 +37,10 @@ Future<void> main() async {
   }
 
   runApp(
-    AppLifecycleLock(
-      child: ListenableBuilder(
-        listenable: PremiumService.instance,
-        builder: (context, _) => QuickScannerApp(cameras: cameras),
+    ChangeNotifierProvider<SubscriptionService>.value(
+      value: subscription,
+      child: AppLifecycleLock(
+        child: QuickScannerApp(cameras: cameras),
       ),
     ),
   );

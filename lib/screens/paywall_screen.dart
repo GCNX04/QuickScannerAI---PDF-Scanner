@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
 
-import '../services/premium_service.dart';
+import '../services/subscription_service.dart';
 import '../theme/app_theme.dart';
 
 /// Full-screen premium upsell (RevenueCat + store products when configured).
@@ -98,16 +99,28 @@ class _PaywallScreenState extends State<PaywallScreen> with TickerProviderStateM
     super.dispose();
   }
 
-  Future<void> _run(Future<bool> Function() action) async {
+  Future<void> _purchaseSelected() async {
     if (_busy) return;
     setState(() => _busy = true);
     HapticFeedback.mediumImpact();
     try {
-      await action();
+      final sub = context.read<SubscriptionService>();
+      final type = _selected == _PlanChoice.yearly ? PackageType.annual : PackageType.monthly;
+      final r = await sub.purchasePackage(type);
       if (!mounted) return;
-      if (PremiumService.instance.isEntitled) {
+      if (r.unlocked) {
         HapticFeedback.lightImpact();
         Navigator.of(context).pop(true);
+        return;
+      }
+      if (!r.cancelled && r.errorMessage != null && r.errorMessage!.trim().isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(r.errorMessage!),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadii.sm)),
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -119,7 +132,7 @@ class _PaywallScreenState extends State<PaywallScreen> with TickerProviderStateM
     setState(() => _busy = true);
     HapticFeedback.selectionClick();
     try {
-      final ok = await PremiumService.instance.restorePurchases();
+      final ok = await context.read<SubscriptionService>().restorePurchases();
       if (!mounted) return;
       if (ok) {
         HapticFeedback.mediumImpact();
@@ -128,7 +141,7 @@ class _PaywallScreenState extends State<PaywallScreen> with TickerProviderStateM
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text(
-              'No active subscription found. Use the same App Store or Google Play account you purchased with, then try again.',
+              'No active subscription found. Use the same Google Play account you purchased with, then try again.',
             ),
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadii.sm)),
@@ -321,7 +334,7 @@ class _PaywallScreenState extends State<PaywallScreen> with TickerProviderStateM
                       Expanded(
                         child: Text(
                           _yearlyIntroLabel ??
-                              'Free trials and intro offers, when available, are applied by the App Store or Google Play at checkout. Yearly plans often include trials (commonly ${PremiumService.trialDays} days) when configured by the publisher.',
+                              'Free trials and intro offers, when available, are applied by Google Play at checkout. Yearly plans often include trials (commonly ${SubscriptionService.trialDaysHint} days) when configured by the publisher.',
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.fog),
                         ),
                       ),
@@ -357,15 +370,7 @@ class _PaywallScreenState extends State<PaywallScreen> with TickerProviderStateM
                       duration: const Duration(milliseconds: 220),
                       child: FilledButton(
                         key: ValueKey(_selected),
-                        onPressed: _busy
-                            ? null
-                            : () {
-                                if (_selected == _PlanChoice.yearly) {
-                                  _run(PremiumService.instance.purchaseYearly);
-                                } else {
-                                  _run(PremiumService.instance.purchaseMonthly);
-                                }
-                              },
+                        onPressed: _busy ? null : _purchaseSelected,
                         style: FilledButton.styleFrom(
                           minimumSize: const Size.fromHeight(54),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
@@ -403,7 +408,7 @@ class _PaywallScreenState extends State<PaywallScreen> with TickerProviderStateM
                         style: const TextStyle(fontWeight: FontWeight.w700),
                       ),
                     ),
-                    if (!PremiumService.instance.isRevenueCatConfigured) ...[
+                    if (!context.watch<SubscriptionService>().isRevenueCatConfigured) ...[
                       const SizedBox(height: 8),
                       Text(
                         'This build is missing RevenueCat API keys — purchases are disabled. See docs/REVENUECAT_SETUP.md.',
@@ -413,7 +418,7 @@ class _PaywallScreenState extends State<PaywallScreen> with TickerProviderStateM
                     ],
                     const SizedBox(height: 4),
                     Text(
-                      'Subscriptions renew until canceled in your App Store or Google Play account settings.',
+                      'Subscriptions renew until canceled in your Google Play account settings.',
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.mist),
                     ),

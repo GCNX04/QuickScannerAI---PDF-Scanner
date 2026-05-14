@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
-import '../services/premium_service.dart';
+import '../services/subscription_service.dart';
 import '../theme/app_theme.dart';
 
 class QsProBanner extends StatelessWidget {
@@ -10,10 +11,9 @@ class QsProBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: PremiumService.instance,
-      builder: (context, _) {
-        final active = PremiumService.instance.isEntitled;
+    return Consumer<SubscriptionService>(
+      builder: (context, sub, _) {
+        final active = sub.isPro;
         final child = Padding(
           padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
           child: Row(

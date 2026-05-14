@@ -7,14 +7,17 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+import 'package:provider/provider.dart';
+
 import '../core/crypto/aes_gcm_vault.dart';
 import '../core/security/app_lock_service.dart';
 import '../models/scan_record.dart';
 import '../services/onboarding_prefs.dart';
-import '../services/premium_service.dart';
+import '../services/subscription_service.dart';
 import '../services/scan_storage.dart';
 import '../theme/app_theme.dart';
 import '../utils/paywall_navigation.dart';
+import '../utils/require_pro.dart';
 import '../widgets/app_page_routes.dart';
 import '../widgets/premium_badge.dart';
 import '../widgets/qs_empty_state.dart';
@@ -61,6 +64,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _shareScan(ScanRecord r) async {
+    if (!await requirePro(context)) return;
     final file = File(r.path);
     if (!await file.exists()) {
       await ScanStorage.removeIfMissing(r.path);
@@ -121,7 +125,8 @@ class _HomeScreenState extends State<HomeScreen> {
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 18),
           child: ListenableBuilder(
             listenable: AppLockService.instance,
-            builder: (context, _) => Column(
+            builder: (context, _) => Consumer<SubscriptionService>(
+              builder: (context, sub, _) => Column(
               mainAxisSize: MainAxisSize.min,
               children: [
               ListTile(
@@ -161,7 +166,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 leading: const Icon(Icons.workspace_premium_outlined),
                 title: const Text('Manage subscription'),
                 subtitle: Text(
-                  PremiumService.instance.isEntitled ? 'Pro is active on this device.' : 'Upgrade or restore purchases.',
+                  sub.isPro ? 'Pro is active on this device.' : 'Upgrade or restore purchases.',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 onTap: () async {
@@ -189,21 +194,23 @@ class _HomeScreenState extends State<HomeScreen> {
                   title: const Text('Reset subscription (debug)'),
                   onTap: () async {
                     Navigator.pop(context);
-                    await PremiumService.instance.debugResetSubscription();
+                    await context.read<SubscriptionService>().debugResetSubscription();
                     if (!context.mounted) return;
                     QsMessenger.info(context, 'Subscription state cleared.');
                   },
                 ),
             ],
+              ),
+            ),
           ),
-        ),
-      );
+        );
       },
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final sub = context.watch<SubscriptionService>();
     final hasCamera = widget.cameras.isNotEmpty;
     final greeting = _greeting();
     final mockPages = 18 + _recents.length * 2;
@@ -278,7 +285,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                                 letterSpacing: -0.6,
                                               ),
                                         ),
-                                        if (PremiumService.instance.isEntitled) ...[
+                                        if (sub.isPro) ...[
                                           const SizedBox(width: 10),
                                           const PremiumBadge(compact: true),
                                         ],

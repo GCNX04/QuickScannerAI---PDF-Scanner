@@ -10,12 +10,11 @@ import '../core/crypto/aes_gcm_vault.dart';
 import '../models/scan_record.dart';
 import '../services/isolate_filter_thumb.dart';
 import '../services/pdf_export.dart';
-import '../services/premium_service.dart';
 import '../services/scan_storage.dart';
 import '../services/secure_file_wipe.dart';
 import '../services/secure_zip_export.dart';
 import '../theme/app_theme.dart';
-import '../utils/paywall_navigation.dart';
+import '../utils/require_pro.dart';
 import '../widgets/qs_snackbar.dart';
 
 class ExportScanScreen extends StatefulWidget {
@@ -141,6 +140,7 @@ class _ExportScanScreenState extends State<ExportScanScreen> {
 
   /// Standard export: encrypted copy in library + share plaintext PDF from a temp file.
   Future<void> _exportPdfAndShare({String? via}) async {
+    if (!await requirePro(context)) return;
     if (_busy) return;
     setState(() => _busy = true);
     File? shareTemp;
@@ -186,6 +186,7 @@ class _ExportScanScreenState extends State<ExportScanScreen> {
 
   /// Encrypted library copy + share password-protected AES-256 ZIP (plaintext PDF only in memory).
   Future<void> _secureZipExportAndShare({String? via}) async {
+    if (!await requirePro(context)) return;
     if (_busy) return;
     final pwd = await _promptZipPassword();
     if (!mounted || pwd == null) return;
@@ -249,11 +250,8 @@ class _ExportScanScreenState extends State<ExportScanScreen> {
   }
 
   Future<void> _cloudBackup(String service) async {
-    if (!PremiumService.instance.hasCloudBackup) {
-      HapticFeedback.lightImpact();
-      await openPaywall(context);
-      if (!mounted || !PremiumService.instance.hasCloudBackup) return;
-    }
+    if (!await requirePro(context)) return;
+    if (!mounted) return;
     HapticFeedback.mediumImpact();
     QsMessenger.info(
       context,

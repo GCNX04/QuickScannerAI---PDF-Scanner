@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 
-import '../services/premium_service.dart';
+import '../services/subscription_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/paywall_navigation.dart';
 
@@ -33,9 +34,8 @@ class _RenameDocumentSheetState extends State<RenameDocumentSheet> {
   @override
   Widget build(BuildContext context) {
     final bottom = MediaQuery.paddingOf(context).bottom;
-    return ListenableBuilder(
-      listenable: PremiumService.instance,
-      builder: (context, _) {
+    return Consumer<SubscriptionService>(
+      builder: (context, sub, _) {
         return Padding(
           padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
           child: TweenAnimationBuilder<double>(
@@ -159,7 +159,7 @@ class _RenameDocumentSheetState extends State<RenameDocumentSheet> {
                         ],
                       ),
                     ),
-                  ] else if (PremiumService.instance.hasFullDocumentIntelligence) ...[
+                  ] else if (sub.isPro) ...[
                     Container(
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
